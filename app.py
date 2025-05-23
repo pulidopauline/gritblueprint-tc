@@ -51,19 +51,19 @@ if main_file and vendor_file:
         on='product code', how='left'
     )
 
-    merged_df['original price'] = merged_df['unit price']
+    merged_df['original price'] = merged_df['drop ship price']
     merged_df['was updated'] = (
         merged_df['updated price'].notnull() &
         ~np.isclose(merged_df['original price'], merged_df['updated price'], rtol=1e-5, atol=1e-8)
     )
 
     # Apply only actual changes
-    merged_df.loc[merged_df['was updated'], 'unit price'] = merged_df['updated price']
+    merged_df.loc[merged_df['was updated'], 'drop ship price'] = merged_df['updated price']
     changes_df = merged_df[merged_df['was updated']]
 
     if not changes_df.empty:
         st.subheader("🔄 Products That Will Be Updated")
-        st.dataframe(changes_df[['product code', 'original price', 'unit price']])
+        st.dataframe(changes_df[['product code', 'original price', 'drop ship price']])
 
         if st.button("✅ Confirm Price Update"):
             st.session_state.confirmed = True
@@ -87,9 +87,9 @@ if main_file and vendor_file:
             )
 
             # Prepare changelog
-            changelog_df = changes_df[['product code', 'original price', 'unit price']].copy()
+            changelog_df = changes_df[['product code', 'original price', 'drop ship price']].copy()
             changelog_df['original price'] = changelog_df['original price'].round(5)
-            changelog_df['unit price'] = changelog_df['unit price'].round(5)
+            changelog_df['drop ship price'] = changelog_df['drop ship price'].round(5)
             changelog_df['updated by'] = st.session_state.username
             changelog_df['timestamp'] = datetime.now().strftime("%m/%d/%Y %H:%M")
 
