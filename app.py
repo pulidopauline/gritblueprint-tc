@@ -57,8 +57,10 @@ if main_file and vendor_file:
         ~np.isclose(merged_df['original price'], merged_df['updated price'], rtol=1e-5, atol=1e-8)
     )
 
-    # Apply only actual changes
+    # Apply only actual changes to DROP SHIP PRICE
     merged_df.loc[merged_df['was updated'], 'drop ship price'] = merged_df['updated price']
+
+    # Preview of changes
     changes_df = merged_df[merged_df['was updated']]
 
     if not changes_df.empty:
@@ -90,8 +92,9 @@ if main_file and vendor_file:
             changelog_df = changes_df[['product code', 'original price', 'drop ship price']].copy()
             changelog_df['original price'] = changelog_df['original price'].round(5)
             changelog_df['drop ship price'] = changelog_df['drop ship price'].round(5)
-            changelog_df['updated by'] = st.session_state.username
-            changelog_df['timestamp'] = datetime.now().strftime("%m/%d/%Y %H:%M")
+            changelog_df['updated by'] = current_user
+            changelog_df['timestamp'] = pd.Timestamp.now().strftime('%m/%d/%Y %H:%M')
+
 
             changelog_csv = changelog_df.to_csv(index=False).encode('utf-8')
             st.download_button(
