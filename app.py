@@ -31,6 +31,7 @@ if not st.session_state.authenticated:
 st.set_page_config(page_title="Product Price Updater", layout="wide")
 st.title("📦 Product Price Updater")
 st.write(f"👤 Logged in as: {st.session_state.username}")
+current_user = st.session_state.username
 
 main_file = st.file_uploader("📁 Upload Main Spreadsheet", type="xlsx")
 vendor_file = st.file_uploader("📁 Upload Vendor Spreadsheet", type="xlsx")
@@ -45,7 +46,7 @@ if main_file and vendor_file:
 
     vendor_df.rename(columns={'item number': 'product code', 'new price': 'updated price'}, inplace=True)
 
-    # Merge and detect changes
+    # Merge and detect changes using drop ship price
     merged_df = main_df.merge(
         vendor_df[['product code', 'updated price']],
         on='product code', how='left'
@@ -57,10 +58,9 @@ if main_file and vendor_file:
         ~np.isclose(merged_df['original price'], merged_df['updated price'], rtol=1e-5, atol=1e-8)
     )
 
-    # Apply only actual changes to DROP SHIP PRICE
+    # Apply only actual changes to drop ship price
     merged_df.loc[merged_df['was updated'], 'drop ship price'] = merged_df['updated price']
 
-    # Preview of changes
     changes_df = merged_df[merged_df['was updated']]
 
     if not changes_df.empty:
@@ -94,7 +94,6 @@ if main_file and vendor_file:
             changelog_df['drop ship price'] = changelog_df['drop ship price'].round(5)
             changelog_df['updated by'] = current_user
             changelog_df['timestamp'] = pd.Timestamp.now().strftime('%m/%d/%Y %H:%M')
-
 
             changelog_csv = changelog_df.to_csv(index=False).encode('utf-8')
             st.download_button(
