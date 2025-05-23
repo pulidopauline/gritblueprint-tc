@@ -30,8 +30,8 @@ if not st.session_state.authenticated:
 # --- MAIN APP ---
 st.set_page_config(page_title="Product Price Updater", layout="wide")
 st.title("📦 Product Price Updater")
-st.write(f"👤 Logged in as: {st.session_state.username}")
 current_user = st.session_state.username
+st.write(f"👤 Logged in as: {current_user}")
 
 main_file = st.file_uploader("📁 Upload Main Spreadsheet", type="xlsx")
 vendor_file = st.file_uploader("📁 Upload Vendor Spreadsheet", type="xlsx")
@@ -44,43 +44,67 @@ if main_file and vendor_file:
     main_df.columns = main_df.columns.str.strip().str.lower()
     vendor_df.columns = vendor_df.columns.str.strip().str.lower()
 
-    vendor_df.rename(columns={'item number': 'product code', 'new price': 'updated price'}, inplace=True)
+    # Rename vendor for merge
+    vendor_df.rename(columns={
+        'item number': 'product code',
+        'new price': 'updated price'
+    }, inplace=True)
 
-    # Merge and detect changes using drop ship price
+    # Merge on product code
     merged_df = main_df.merge(
         vendor_df[['product code', 'updated price']],
         on='product code', how='left'
     )
 
+    # Keep original drop ship price for comparison
     merged_df['original price'] = merged_df['drop ship price']
+
+    # Detect actual changes
     merged_df['was updated'] = (
         merged_df['updated price'].notnull() &
-        ~np.isclose(merged_df['original price'], merged_df['updated price'], rtol=1e-5, atol=1e-8)
+        ~np.isclose(
+            merged_df['original price'],
+            merged_df['updated price'],
+            rtol=1e-5,
+            atol=1e-8
+        )
     )
 
-    # Apply only actual changes to drop ship price
+    # Apply updates only to drop ship price
     merged_df.loc[merged_df['was updated'], 'drop ship price'] = merged_df['updated price']
 
-    changes_df = merged_df[merged_df['was updated']]
+    # Calculate percentage change (new vs original)
+    merged_df['price change (%)'] = (
+        (merged_df['drop ship price'] - merged_df['original price'])
+        / merged_df['original price']
+    ) * 100
+    merged_df['price change (%)'] = merged_df['price change (%)'].round(2)
 
+    # Preview only the rows that will change
+    changes_df = merged_df[merged_df['was updated']]
     if not changes_df.empty:
         st.subheader("🔄 Products That Will Be Updated")
-        st.dataframe(changes_df[['product code', 'original price', 'drop ship price']])
+        st.dataframe(changes_df[['product code',
+                                 'original price',
+                                 'drop ship price',
+                                 'price change (%)']])
 
         if st.button("✅ Confirm Price Update"):
             st.session_state.confirmed = True
             st.success("Price update confirmed!")
 
         if st.session_state.get("confirmed"):
-            # Create downloadable updated Excel
+            # Prepare updated Excel (only drop helper cols)
             def to_excel(df):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.drop(columns=['updated price', 'original price', 'was updated'], errors='ignore').to_excel(writer, index=False)
+                    df.drop(
+                        columns=['updated price', 'original price', 'was updated'],
+                        errors='ignore'
+                    ).to_excel(writer, index=False)
                 return output.getvalue()
 
             updated_file = to_excel(merged_df)
-
             st.download_button(
                 "📥 Download Updated main.xlsx",
                 updated_file,
@@ -88,19 +112,22 @@ if main_file and vendor_file:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-            # Prepare changelog
-            changelog_df = changes_df[['product code', 'original price', 'drop ship price']].copy()
-            changelog_df['original price'] = changelog_df['original price'].round(5)
-            changelog_df['drop ship price'] = changelog_df['drop ship price'].round(5)
+            # Build changelog with pct change
+            changelog_df = changes_df[[
+                'product code',
+                'original price',
+                'drop ship price',
+                'price change (%)'
+            ]].copy()
             changelog_df['updated by'] = current_user
-            changelog_df['timestamp'] = pd.Timestamp.now().strftime('%m/%d/%Y %H:%M')
+            changelog_df['timestamp'] = datetime.now().strftime("%m/%d/%Y %H:%M")
 
             changelog_csv = changelog_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 "🗒️ Download Change Log (CSV)",
                 changelog_csv,
-                file_name=f"price_update_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"price_update_log_{datetime.now():%Y%m%d_%H%M%S}.csv",
                 mime='text/csv'
             )
     else:
-        st.info("✅ No price changes detected. All prices in the vendor file already match the main file.")
+        st.info("✅ No price changes detected. All prices already match.")
